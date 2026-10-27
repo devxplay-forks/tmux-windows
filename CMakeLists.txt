@@ -250,7 +250,7 @@ target_compile_definitions(tmux PRIVATE
     _CRT_SECURE_NO_WARNINGS
     _CRT_NONSTDC_NO_DEPRECATE
     PACKAGE_NAME="tmux"
-    PACKAGE_VERSION="3.6a-win32"
+    PACKAGE_VERSION="3.6a-win32-patched"
     TMUX_CONF="${CMAKE_INSTALL_PREFIX}/etc/tmux.conf"
     # Functions provided by compat/ source files we compile:
     # Do NOT define HAVE_X for these - compat.h needs to declare them

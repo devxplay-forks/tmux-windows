@@ -905,7 +905,7 @@ tty_term_string_s(struct tty_term *term, enum tty_code_code code, const char *a)
 #elif defined(HAVE_TIPARM)
 	s = tiparm(x, a);
 #else
-	s = tparm((char *)x, (long)a, 0, 0, 0, 0, 0, 0, 0, 0);
+	s = tparm((char *)x, (intptr_t)a, 0, 0, 0, 0, 0, 0, 0, 0);
 #endif
 	if (s == NULL) {
 		log_debug("could not expand %s", tty_term_codes[code].name);
@@ -925,7 +925,7 @@ tty_term_string_ss(struct tty_term *term, enum tty_code_code code,
 #elif defined(HAVE_TIPARM)
 	s = tiparm(x, a, b);
 #else
-	s = tparm((char *)x, (long)a, (long)b, 0, 0, 0, 0, 0, 0, 0);
+	s = tparm((char *)x, (intptr_t)a, (intptr_t)b, 0, 0, 0, 0, 0, 0, 0);
 #endif
 	if (s == NULL) {
 		log_debug("could not expand %s", tty_term_codes[code].name);

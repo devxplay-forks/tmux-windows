@@ -646,14 +646,31 @@ tparm(const char *str, ...)
 			break;
 
 		case 's':
-			/* Pop and output as string. */
+			/*
+			 * Pop and output as string.
+			 *
+			 * The caller must pass the pointer as intptr_t (see
+			 * tty_term_string_s/_ss).  If a future call site gets
+			 * the width wrong again, the recovered pointer is
+			 * garbage; dereferencing it would kill the server, so
+			 * trap the access violation and degrade to an empty
+			 * expansion instead.  A range check cannot do this:
+			 * truncated Win64 pointers are zero-extended into
+			 * plausible-looking low addresses (e.g. 0x0000E0BE6510),
+			 * which pass any magic threshold.
+			 */
 			if (sp > 0) {
 				const char *sv =
 				    (const char *)(uintptr_t)stack[--sp];
 				if (sv != NULL) {
-					while (*sv != '\0' &&
-					    pos < sizeof buf - 1)
-						buf[pos++] = *sv++;
+					__try {
+						while (*sv != '\0' &&
+						    pos < sizeof buf - 1)
+							buf[pos++] = *sv++;
+					} __except (
+					    EXCEPTION_EXECUTE_HANDLER) {
+						/* Bad pointer: stop here. */
+					}
 				}
 			}
 			break;
