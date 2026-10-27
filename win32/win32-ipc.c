@@ -317,10 +317,40 @@ pipe_discover_and_connect(const char *label, char *nonce_out, size_t nonce_size)
 			return (INVALID_SOCKET);
 	}
 
-	/* Read "port:nonce\n" from pipe. */
-	if (!ReadFile(pipe, buf, sizeof buf - 1, &nread, NULL) || nread == 0) {
-		CloseHandle(pipe);
-		return (INVALID_SOCKET);
+	/*
+	 * Read "port:nonce\n" from pipe.
+	 *
+	 * The handle is synchronous (CreateFileA above passes no
+	 * FILE_FLAG_OVERLAPPED), so a bare ReadFile blocks indefinitely if the
+	 * server accepted the connection but never writes the response - for
+	 * example when its accept thread is wedged. Every later tmux command
+	 * would then hang with no error instead of failing. Poll with
+	 * PeekNamedPipe so the wait is bounded by PIPE_WAIT_TIMEOUT_MS.
+	 */
+	nread = 0;
+	{
+		DWORD	deadline = GetTickCount() + PIPE_WAIT_TIMEOUT_MS;
+		int	got = 0;
+
+		for (;;) {
+			DWORD	avail = 0;
+
+			if (!PeekNamedPipe(pipe, NULL, 0, NULL, &avail, NULL))
+				break;		/* broken pipe / handle error */
+			if (avail > 0) {
+				if (ReadFile(pipe, buf, sizeof buf - 1,
+				    &nread, NULL) && nread > 0)
+					got = 1;
+				break;
+			}
+			if ((int)(deadline - GetTickCount()) <= 0)
+				break;		/* timed out */
+			Sleep(50);
+		}
+		if (!got) {
+			CloseHandle(pipe);
+			return (INVALID_SOCKET);
+		}
 	}
 	CloseHandle(pipe);
 	buf[nread] = '\0';
