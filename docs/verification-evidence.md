@@ -166,16 +166,32 @@ of checking anything.
 the 10-script regression suite passes, Markdown formatting is enforced, and the
 pre-commit hook executes.
 
-**Not proven:** the identity of the loop that caused the original 100% CPU spin.
-Reproduction has not succeeded - a synthetic output burst alone does not trigger
-it, most likely because no client is attached and therefore tmux never renders.
+**Root cause identified (this hang):** `tty_draw_line()` in `tty-draw.c`
+advances its cell index `i` by `empty` or by `gcp->data.width`, and leaves the
+`for (;;)` loop only when `i == nx`. A zero-width cell makes that increment a
+no-op, and an increment that overshoots `nx` makes the equality test permanently
+false. Either way the loop never terminates. The captured stack proved it:
 
-**The three source fixes are hardening, not a proven fix for that hang.** Two of
-them guard states tmux cannot actually reach. The `input.c` tab guard needs a
-screen width of exactly 0, which tmux rejects (`new -x 0` fails with "width too
-small") and `resize-pane` clamps to 1; at width 1 the original `cx >= sx - 1`
-check was already true, so the old code was safe. The `tty.c` guard needs
-`TERM_NOAM`, which the builtin terminfo clears because it sets `am`. The
-`win32-ipc.c` deadline is reachable in principle, but the discovery pipe is never
-busy in practice (it connects in about 11 ms), so it is not this hang either.
-See `DEBUGGING.md` for how to capture the stack when it recurs.
+```
+tmux!tty_draw_line+0x41f          [tty-draw.c @ 258]
+tmux!screen_redraw_draw_pane+0x202 [screen-redraw.c @ 996]
+tmux!screen_redraw_pane+0x79       [screen-redraw.c @ 703]
+tmux!server_client_check_redraw+0x3ce [server-client.c @ 3337]
+```
+
+A double-width character's trailing half carries `GRID_FLAG_PADDING` and
+`data.width == 0`, which is why wide characters trigger it. The redraw path only
+runs with a client attached, which is why the output-burst harness never
+reproduced it.
+
+Upstream guards this by returning `empty = 1` for padding and zero-width cells.
+This fork handles padding through its own `TTY_DRAW_LINE_PAD` state, which skips
+the append but not the increment. The fix keeps that state and makes the
+increment total: `i >= nx` ends the loop, `gcp = &grid_default_cell` avoids
+appending stale data on the final iteration, and a zero width advances by one.
+`regress/win32-wide-char-redraw.sh` covers it with a real attached client.
+
+**Still not proven:** whether this is the only such loop. The earlier three fixes
+remain hardening rather than this fix - the `input.c` tab guard needs a width of
+exactly 0, which tmux rejects, and the `tty.c` guard needs `TERM_NOAM`, which the
+builtin terminfo clears.

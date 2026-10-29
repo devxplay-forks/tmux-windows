@@ -220,13 +220,14 @@ tty_draw_line(struct tty *tty, struct screen *s, u_int px, u_int py, u_int nx,
 	current_state = TTY_DRAW_LINE_FIRST;
 	for (;;) {
 		/* Work out the next state. */
-		if (i == nx) {
+		if (i >= nx) {
 			/*
 			 * If this is the last cell, we are done. But we need to
 			 * go through the loop again to flush anything in
 			 * the buffer.
 			 */
 			empty = 0;
+			gcp = &grid_default_cell;
 			next_state = TTY_DRAW_LINE_DONE;
 		} else {
 			/* Get the current cell. */
@@ -318,8 +319,10 @@ tty_draw_line(struct tty *tty, struct screen *s, u_int px, u_int py, u_int nx,
 		memcpy(&last, gcp, sizeof last);
 		if (empty != 0)
 			i += empty;
-		else
+		else if (gcp->data.width != 0)
 			i += gcp->data.width;
+		else
+			i++;
 	}
 
 	tty->flags = (tty->flags & ~TTY_NOCURSOR)|flags;
