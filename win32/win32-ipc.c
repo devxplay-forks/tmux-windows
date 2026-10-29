@@ -306,15 +306,27 @@ pipe_discover_and_connect(const char *label, char *nonce_out, size_t nonce_size)
 	 * exists at all (ERROR_FILE_NOT_FOUND), fail immediately —
 	 * this is the normal "no server running" fast-fail path.
 	 */
-	for (;;) {
-		pipe = CreateFileA(pipe_name, GENERIC_READ | GENERIC_WRITE,
-		    0, NULL, OPEN_EXISTING, 0, NULL);
-		if (pipe != INVALID_HANDLE_VALUE)
-			break;
-		if (GetLastError() != ERROR_PIPE_BUSY)
-			return (INVALID_SOCKET);
-		if (!WaitNamedPipeA(pipe_name, PIPE_WAIT_TIMEOUT_MS))
-			return (INVALID_SOCKET);
+	{
+		/*
+		 * Bound the whole retry loop, not just each wait. Previously a
+		 * pipe that stayed busy made this loop retry forever with no
+		 * overall deadline, so every client hung instead of failing.
+		 */
+		DWORD	deadline = GetTickCount() + PIPE_WAIT_TIMEOUT_MS;
+
+		for (;;) {
+			pipe = CreateFileA(pipe_name,
+			    GENERIC_READ | GENERIC_WRITE, 0, NULL,
+			    OPEN_EXISTING, 0, NULL);
+			if (pipe != INVALID_HANDLE_VALUE)
+				break;
+			if (GetLastError() != ERROR_PIPE_BUSY)
+				return (INVALID_SOCKET);
+			if ((int)(deadline - GetTickCount()) <= 0)
+				return (INVALID_SOCKET);
+			if (!WaitNamedPipeA(pipe_name, PIPE_WAIT_TIMEOUT_MS))
+				return (INVALID_SOCKET);
+		}
 	}
 
 	/*

@@ -742,8 +742,15 @@ tty_putn(struct tty *tty, const void *buf, size_t len, u_int width)
 {
 	if ((tty->term->flags & TERM_NOAM) &&
 	    tty->cy == tty->sy - 1 &&
-	    tty->cx + len >= tty->sx)
+	    tty->cx + len >= tty->sx) {
+		/*
+		 * sx - cx - 1 underflows when cx >= sx - 1, which would hand a
+		 * huge length to tty_add and read past the end of buf.
+		 */
+		if (tty->sx < 2 || tty->cx >= tty->sx - 1)
+			return;
 		len = tty->sx - tty->cx - 1;
+	}
 
 	tty_add(tty, buf, len);
 	if (tty->cx + width > tty->sx) {

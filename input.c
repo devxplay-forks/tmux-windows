@@ -1322,6 +1322,8 @@ input_c0_dispatch(struct input_ctx *ictx)
 		break;
 	case '\011':	/* HT */
 		/* Don't tab beyond the end of the line. */
+		if (screen_size_x(s) < 2)
+			break;
 		cx = s->cx;
 		if (cx >= screen_size_x(s) - 1)
 			break;
