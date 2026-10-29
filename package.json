@@ -1,0 +1,17 @@
+{
+	"name": "tmux-windows",
+	"private": true,
+	"type": "module",
+	"description": "Developer tooling for tmux-windows (changed-file Markdown formatting + regression gate).",
+	"scripts": {
+		"verify": "node scripts/verify-goal.mjs",
+		"prepare": "husky"
+	},
+	"devDependencies": {
+		"husky": "9.1.7",
+		"prettier": "3.9.10"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	}
+}

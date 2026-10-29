@@ -1,0 +1,13 @@
+{
+  "goal": {
+    "verify": {
+      "enabled": true,
+      "command": "node scripts/verify-goal.mjs",
+      "timeout": 3000
+    },
+    "reviewer": {
+      "enabled": true,
+      "log": true
+    }
+  }
+}

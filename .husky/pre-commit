@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# Markdown-only pre-commit hook (adapted from the pi monorepo).
+#
+# Mirrors pi's behaviour: format STAGED Markdown with prettier, then restage
+# ONLY the files prettier touched. Deliberately does NOT run the regression
+# suite - the regression gate is run by scripts/verify-goal.mjs instead.
+#
+# Active via .git/hooks/pre-commit (no core.hooksPath change required).
+
+# Format staged Markdown before anything else.
+if [ ! -x node_modules/.bin/prettier ]; then
+	echo "prettier is not installed. Run: npm install --ignore-scripts" >&2
+	exit 1
+fi
+
+STAGED_MD=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md')
+if [ -z "$STAGED_MD" ]; then
+	exit 0
+fi
+
+echo "Formatting staged Markdown..."
+printf '%s\n' "$STAGED_MD" | tr '\n' '\0' | xargs -0 node_modules/.bin/prettier --write || exit 1
+
+# Restage ONLY the Markdown files, so unrelated staged changes are never
+# silently swept into the commit.
+printf '%s\n' "$STAGED_MD" | while IFS= read -r file; do
+	if [ -n "$file" ] && [ -f "$file" ]; then
+		git add "$file"
+	fi
+done
+
+echo "✅ Markdown pre-commit checks passed!"
