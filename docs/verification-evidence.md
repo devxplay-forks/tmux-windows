@@ -195,3 +195,73 @@ appending stale data on the final iteration, and a zero width advances by one.
 remain hardening rather than this fix - the `input.c` tab guard needs a width of
 exactly 0, which tmux rejects, and the `tty.c` guard needs `TERM_NOAM`, which the
 builtin terminfo clears.
+
+---
+
+## 8. Platform capability audit (DEV-114)
+
+The Windows port replaces ncurses with the hardcoded `win32_terminfo[]` table in
+`win32/win32-terminfo.c`. Any capability missing from that table is missing
+everywhere, and tmux reports nothing when a whole feature disappears as a
+result.
+
+`kmous` was missing. tmux gates the entire mouse-mode emission block on
+`tty_term_has(TTYC_KMOUS)` (`tty.c:388`, `tty.c:510`, `tty.c:941`), so it never
+emitted `?1000h/?1002h/?1003h/?1006h` on Windows and no application could
+receive mouse events - with `mouse on`, without it, and regardless of config.
+
+Why the gap existed: upstream reads `kmous` from the system terminfo entry.
+Here it can only arrive through `tty_features`, and `tty_default_features()` is
+reached only from a device-attributes reply that identifies a known terminal
+(`tty-keys.c:1565-1642` - `mintty`, `tmux`, `rxvt-unicode`, `iTerm2`, `XTerm`,
+`foot`). A plain ConPTY answers secondary DA with a numeric id that hits none of
+the `'M'`/`'T'`/`'U'` cases, and extended DA with a product name matching none of
+the prefixes, so no features are added.
+
+Two traps worth recording:
+
+1. **A nested-tmux rig cannot observe this.** Attaching a tmux client inside a
+   tmux pane makes the outer tmux answer extended DA as `tmux `, which calls
+   `tty_default_features("tmux")` and adds `mouse` - on an unfixed build. Any
+   assertion made through such a rig is green by artifact.
+2. **The capability value is irrelevant.** `tty-keys.c` parses both X10
+   (`\033[M`) and SGR (`\033[<`) mouse input by hardcoding them, so `kmous` is
+   only ever a presence check. That is why `\033[<` here and the feature
+   table's `\E[M` are interchangeable.
+
+`regress/win32-terminfo-caps.sh` now asserts that the table resolves every
+capability an entire feature is gated on. It was red on `kmous` alone, and is
+green after adding the row.
+
+---
+
+## 9. ConPTY render hardening (DEV-114) - reverted
+
+An earlier iteration gated the erase strategy and the wrapped-line lookup on a
+runtime flag, `TERM_CONPTY_NO_PENDING_WRAP`. That flag has been removed. It
+conflated two unrelated decisions, and the wrapped-line lookup it disabled is the
+context `tty_draw_line_clear()` needs when a band continues across a row
+boundary.
+
+What remains in place from this work:
+
+- `win32_terminfo.c` still declares `bce`, and `tty_fake_bce()` still returns 0
+  when it is set, so `tty_draw_line_clear()` uses `EL`/`EL1` for blank runs
+  exactly as upstream does.
+- `b1f7abaa`'s `#ifndef _WIN32` guard around the wrapped-line optimisation is
+  restored, so Windows still forces explicit `CUP` positioning between lines.
+
+A real defect found while reverting: `tty_draw_line()` read `last` before it was
+initialised. The leading-padding clear called `tty_attributes(tty, &last, ...)`
+34 lines before `memcpy(&last, &grid_default_cell, ...)`, so undefined stack
+contents were applied as cell attributes, background included. The padding path
+now initialises `last` first, and inherits the neighbouring wide glyph's
+attributes when one exists.
+
+`regress/win32-tui-render.sh` covers four properties: the band repaint (the
+client's rendered band must match the inner server's grid, text only), cell
+fidelity (a corpus of styled rows must return verbatim from `capture-pane -p`,
+including wide characters, and overwriting a row must leave no glyph from the
+previous frame), wide characters carrying a specific background, and background
+extent across a five-row band where every row is asserted for full pane width
+and for the background attribute.

@@ -180,6 +180,10 @@ tty_draw_line(struct tty *tty, struct screen *s, u_int px, u_int py, u_int nx,
 					bg = ngc.bg;
 			}
 		}
+		memcpy(&last, &grid_default_cell, sizeof last);
+		last.bg = defaults->bg;
+		if (i != 0)
+			memcpy(&last, &gc, sizeof last);   /* inherit the wide glyph */
 		tty_attributes(tty, &last, defaults, palette, s->hyperlinks);
 		log_debug("%s: clearing %u padding cells", __func__, cx);
 		tty_draw_line_clear(tty, atx, aty, cx, defaults, bg, 0);

@@ -130,6 +130,20 @@ static const struct win32_terminfo_entry win32_terminfo[] = {
 	{ "knp",   "\033[6~",              0, 0, 1 },  /* key_npage */
 	{ "kich1", "\033[2~",              0, 0, 1 },  /* key_ic */
 	{ "kcbt",  "\033[Z",               0, 0, 1 },  /* key_btab */
+	/*
+	 * key_mouse. tmux only ever tests this for presence - tty.c:388,
+	 * tty.c:510 and tty.c:941 all gate on tty_term_has(TTYC_KMOUS) before
+	 * emitting ?1000h/?1002h/?1003h/?1006h. Incoming mouse input is parsed
+	 * by hardcoding both X10 (\033[M) and SGR (\033[<) in tty-keys.c, so
+	 * the value here is never compared; only its existence matters.
+	 *
+	 * It must be in this table rather than left to terminal features:
+	 * tty_default_features() is only reached from a device-attributes reply
+	 * that identifies a known terminal (tty-keys.c:1565-1642), and a plain
+	 * ConPTY matches none of them. Without this row tmux silently never
+	 * enables mouse reporting at all, which is what DEV-114 symptom 1 was.
+	 */
+	{ "kmous", "\033[<",               0, 0, 1 },  /* key_mouse */
 	{ "kf1",   "\033OP",               0, 0, 1 },
 	{ "kf2",   "\033OQ",               0, 0, 1 },
 	{ "kf3",   "\033OR",               0, 0, 1 },

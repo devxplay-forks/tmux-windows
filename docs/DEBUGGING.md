@@ -123,6 +123,29 @@ A spinning server shows one thread `Running` with high user-mode CPU and every
 other thread in `Wait`. Compare user versus privileged time to distinguish an
 application loop from a syscall loop: mostly user time means tmux's own code.
 
+## Capability gaps
+
+When one feature dies wholesale - mouse, clipboard, hyperlinks - suspect a
+missing terminfo capability rather than the feature's own logic. tmux gates
+entire emission blocks on `tty_term_has()`, so an absent capability fails
+silently and no configuration option can compensate.
+
+Enumerate what the Windows port actually resolved, without needing a display:
+
+```sh
+tmux -Lprobe -fNUL new -d -sx -x 80 -y 24 </dev/null
+tmux -Lprobe list-clients -F '#{client_termname} => #{client_termfeatures}'
+```
+
+`#{client_termfeatures}` reports the resolved feature bitmask. For the raw
+capability set, start the server with `-vvv` and read the `tmux-*.log` dump
+written by `tty_term_create`; an absent capability appears as `[missing]`.
+
+Do **not** validate these through a tmux-inside-tmux rig. The outer tmux answers
+extended device attributes as `tmux `, which silently enables the `mouse`
+feature set, so such a check passes even on a build with no `kmous`. See
+`verification-evidence.md` section 8.
+
 ## Regression gate
 
 ```sh
